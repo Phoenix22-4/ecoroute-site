@@ -70,7 +70,7 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // HiveMQ MQTT Logic
+  // HiveMQ MQTT Logic - Optimized for real-time reactivity
   useEffect(() => {
     const Paho = (window as any).Paho;
     if (!Paho) return;
@@ -90,45 +90,53 @@ const App: React.FC = () => {
         const { id, name, lat, lon, fill_level, gas } = payload;
         if (!id) return;
         
+        // Use functional update to ensure no messages are lost
         setBins(prevBins => {
-          const exists = prevBins.findIndex(b => b.id === id);
-          const now = new Date().toLocaleTimeString();
-          if (exists !== -1) {
-            const updated = [...prevBins];
-            updated[exists] = {
-              ...updated[exists],
-              name: name || updated[exists].name,
-              level: fill_level !== undefined ? fill_level : updated[exists].level,
-              smell: gas !== undefined ? gas : updated[exists].smell,
+          const existsIndex = prevBins.findIndex(b => b.id === id);
+          const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+          
+          if (existsIndex !== -1) {
+            const updatedBins = [...prevBins];
+            updatedBins[existsIndex] = {
+              ...updatedBins[existsIndex],
+              name: name || updatedBins[existsIndex].name,
+              level: fill_level !== undefined ? Number(fill_level) : updatedBins[existsIndex].level,
+              smell: gas !== undefined ? Number(gas) : updatedBins[existsIndex].smell,
               location: { 
-                lat: lat !== undefined ? lat : updated[exists].location.lat, 
-                lng: lon !== undefined ? lon : updated[exists].location.lng 
+                lat: lat !== undefined ? Number(lat) : updatedBins[existsIndex].location.lat, 
+                lng: lon !== undefined ? Number(lon) : updatedBins[existsIndex].location.lng 
               },
               lastUpdated: now,
               isIotDevice: true
             };
-            return updated;
+            return updatedBins;
           } else {
             return [...prevBins, {
-              id,
+              id: String(id),
               name: name || `Node: ${id}`,
-              location: { lat: lat || -1.1145, lng: lon || 36.6620 },
-              level: fill_level || 0,
-              smell: gas || 0,
+              location: { lat: Number(lat) || -1.1145, lng: Number(lon) || 36.6620 },
+              level: Number(fill_level) || 0,
+              smell: Number(gas) || 0,
               lastUpdated: now,
               isIotDevice: true
             }];
           }
         });
-      } catch (e) { console.error("MQTT Error", e); }
+      } catch (e) { console.error("MQTT Payload Processing Error", e); }
     };
 
     const options = {
       useSSL: true,
       userName: "ecoroute_admin",
       password: "EcoPass123!",
-      onSuccess: () => { setMqttStatus('connected'); client.subscribe(topic); },
-      onFailure: () => setMqttStatus('disconnected')
+      onSuccess: () => { 
+        setMqttStatus('connected'); 
+        client.subscribe(topic); 
+      },
+      onFailure: (err: any) => {
+        console.error("MQTT Connection Failed", err);
+        setMqttStatus('disconnected');
+      }
     };
     client.connect(options);
     return () => { if (client.isConnected()) client.disconnect(); };
@@ -148,7 +156,7 @@ const App: React.FC = () => {
     } catch (error) {
       console.error("Routing API error", error);
     }
-    return coords; // Fallback to straight lines if API fails
+    return coords; 
   };
 
   const handleOptimizeRoute = async () => {
@@ -159,7 +167,6 @@ const App: React.FC = () => {
       const result = await optimizeCollectionRoute(bins, userLocation || undefined);
       setRoute(result);
       
-      // Calculate real road sequence
       const sequence: [number, number][] = [];
       if (userLocation) sequence.push([userLocation.lat, userLocation.lng]);
       
@@ -314,10 +321,15 @@ const App: React.FC = () => {
                   const isFull = bin.level >= 90;
                   const isSmelly = bin.smell >= 200 && bin.level >= 60;
                   const color = isFull ? '#ef4444' : isSmelly ? '#f59e0b' : '#22c55e';
+                  const needsCollection = isFull || isSmelly;
                   
+                  // CRITICAL: Leaflet Markers need a NEW KEY when internal properties (like color) change 
+                  // otherwise they don't redraw. We add level and smell to the key.
+                  const markerKey = `${bin.id}-${bin.level}-${bin.smell}`;
+
                   const icon = L.divIcon({
                     className: 'custom-icon',
-                    html: `<div style="background-color: ${color};" class="w-8 h-8 rounded-full border-4 border-white shadow-xl flex items-center justify-center transition-all hover:scale-125 ${isFull || isSmelly ? 'animate-pulse' : ''}">
+                    html: `<div style="background-color: ${color};" class="w-8 h-8 rounded-full border-4 border-white shadow-xl flex items-center justify-center transition-all duration-300 transform ${needsCollection ? 'scale-125 animate-pulse' : ''}">
                             <div class="w-2 h-2 rounded-full bg-white"></div>
                            </div>`,
                     iconSize: [32, 32],
@@ -325,14 +337,20 @@ const App: React.FC = () => {
                   });
 
                   return (
-                    <Marker key={bin.id} position={[bin.location.lat, bin.location.lng]} icon={icon}>
+                    <Marker 
+                      key={markerKey} 
+                      position={[bin.location.lat, bin.location.lng]} 
+                      icon={icon}
+                      zIndexOffset={needsCollection ? 1000 : 0} // Ensure priority bins are on TOP
+                    >
                       <Popup>
                         <div className="p-1 min-w-[120px]">
                           <p className="font-black text-xs text-slate-800 uppercase mb-2">{bin.name}</p>
                           <div className="grid grid-cols-2 gap-1 text-[10px]">
-                            <div className="bg-slate-50 p-1 rounded font-bold">Lvl: {bin.level}%</div>
-                            <div className="bg-slate-50 p-1 rounded font-bold">Gas: {bin.smell}</div>
+                            <div className={`p-1 rounded font-bold ${isFull ? 'bg-red-50 text-red-600' : 'bg-slate-50'}`}>Lvl: {bin.level}%</div>
+                            <div className={`p-1 rounded font-bold ${isSmelly ? 'bg-amber-50 text-amber-600' : 'bg-slate-50'}`}>Gas: {bin.smell}</div>
                           </div>
+                          <p className="text-[8px] font-bold text-slate-400 mt-2 uppercase">Last: {bin.lastUpdated}</p>
                         </div>
                       </Popup>
                     </Marker>
@@ -361,8 +379,8 @@ const App: React.FC = () => {
               <div className="absolute bottom-6 right-6 bg-white/95 backdrop-blur-md p-4 rounded-3xl shadow-2xl border border-slate-200 z-[1000] min-w-[160px]">
                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3">Status Map</p>
                 <div className="space-y-2 text-[10px] font-bold">
-                  <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-red-500"></div> <span>Full (Collect)</span></div>
-                  <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-amber-500"></div> <span>Smelly (Collect)</span></div>
+                  <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div> <span>Full (Collect)</span></div>
+                  <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></div> <span>Smelly (Collect)</span></div>
                   <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-green-500"></div> <span>Healthy (Skip)</span></div>
                   {roadPath.length > 0 && (
                     <div className="pt-2 mt-2 border-t border-slate-100 flex items-center gap-2">
