@@ -3,17 +3,8 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { Dustbin, RouteOptimizationResult, Coordinates } from "../types";
 
 export async function optimizeCollectionRoute(bins: Dustbin[], startPos?: Coordinates): Promise<RouteOptimizationResult> {
-  // Check if API Key exists before initializing
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) {
-    console.error("Gemini API Key is missing. Please check your Netlify Environment Variables.");
-    return {
-      optimizedOrder: bins.filter(b => b.level >= 90 || (b.smell >= 200 && b.level >= 60)).map(b => b.id),
-      explanation: "Falling back to basic distance optimization (API Key missing)."
-    };
-  }
-
-  const ai = new GoogleGenAI({ apiKey: apiKey });
+  // Always use new GoogleGenAI({ apiKey: process.env.API_KEY }) as per guidelines
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   const binsToCollect = bins.filter(b => {
     const isFull = b.level >= 90;
@@ -67,7 +58,8 @@ export async function optimizeCollectionRoute(bins: Dustbin[], startPos?: Coordi
       }
     });
 
-    const result = JSON.parse(response.text);
+    // Access .text property directly instead of text() method
+    const result = JSON.parse(response.text || "{}");
     return result as RouteOptimizationResult;
   } catch (error) {
     console.error("Gemini optimization failed:", error);

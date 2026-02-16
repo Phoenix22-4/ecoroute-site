@@ -5,11 +5,11 @@ export interface Coordinates {
 }
 
 export enum CollectionStatus {
-  COLLECT = 'COLLECT',
+  COLLECT = 'COLLECT NOW',
   SKIP = 'SKIP',
   FULL = 'FULL (90%+)',
-  SMELLY = 'SMELLY (>150 & 60%+)',
-  OK = 'OK'
+  SMELLY = 'GAS ALERT',
+  OK = 'NORMAL'
 }
 
 export interface Dustbin {
@@ -19,6 +19,7 @@ export interface Dustbin {
   level: number; // 0-100%
   smell: number; // MQ2 ppm value
   lastUpdated: string;
+  lastSeenTimestamp: number; // Unix timestamp for heartbeat
   isIotDevice: boolean;
 }
 

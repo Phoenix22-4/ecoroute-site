@@ -1,6 +1,6 @@
 {
-  "name": "EcoRoute - Smart Waste Management",
-  "description": "An IoT-integrated dashboard for monitoring smart dustbins in Nairobi and worldwide, featuring route optimization for waste collection based on fullness and gas sensors.",
+  "name": "EcoRoute Pro - Nairobi Smart Waste",
+  "description": "IoT Dashboards for real-time monitoring of ultrasonic and gas sensors in Nairobi. Features shortest-path AI routing and cloud integration.",
   "requestFramePermissions": [
     "geolocation"
   ]
